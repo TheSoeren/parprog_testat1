@@ -1,4 +1,4 @@
-package aufgabe2b;
+package com.task1;
 
 import java.awt.Color;
 import java.awt.Graphics;

@@ -1,4 +1,4 @@
-package aufgabe2b;
+package com.task1;
 
 enum PhilosopherState {
 	THINKING, HUNGRY, EATING
@@ -38,14 +38,23 @@ class Philosopher extends Thread {
 		state = PhilosopherState.HUNGRY;
 		table.notifyStateChange(this);
 
+		// ORIGINAL CODE
+		// // acquire both forks
+		// table.acquireFork(table.leftForkNumber(id));
+		// Thread.sleep(500);
+		// table.acquireFork(table.rightForkNumber(id));
+
+		// MODIFIED WITH LINEAR LOCK ORDER
 		int leftForkNo = table.leftForkNumber(id);
 		int rightForkNo = table.rightForkNumber(id);
 
-		table.acquireFork(leftForkNo);
-		while (!table.tryAcquireFork(rightForkNo)) {
-			System.out.println("Philosophers " + getId() + " retries...");
-			table.releaseFork(leftForkNo);
-			sleep(500);
+		if (leftForkNo < rightForkNo) {
+			table.acquireFork(leftForkNo);
+			Thread.sleep(500);
+			table.acquireFork(rightForkNo);
+		} else {
+			table.acquireFork(rightForkNo);
+			Thread.sleep(500);
 			table.acquireFork(leftForkNo);
 		}
 	}
@@ -66,7 +75,7 @@ class Philosopher extends Thread {
 				putForks();
 			}
 		} catch (InterruptedException e) {
-			throw new AssertionError(e);
+			new AssertionError(e);
 		}
 	}
 }

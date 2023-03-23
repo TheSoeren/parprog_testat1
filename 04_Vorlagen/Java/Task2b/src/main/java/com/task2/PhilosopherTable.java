@@ -1,4 +1,4 @@
-package aufgabe2a;
+package com.task2;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,12 +17,12 @@ class PhilosopherTable {
 		System.out.println("creating table ...");
 		this.nofPhilosophers = nofPhilosophers;
 		forks = new Semaphore[nofPhilosophers];
-		for (int index = 0; index < nofPhilosophers; index++) {
-			forks[index] = new Semaphore(1);
+		for (int i = 0; i < nofPhilosophers; i++) {
+			forks[i] = new Semaphore(1);
 		}
 		philosophers = new Philosopher[nofPhilosophers];
-		for (int index = 0; index < nofPhilosophers; index++) {
-			philosophers[index] = new Philosopher(this, index);
+		for (int i = 0; i < nofPhilosophers; i++) {
+			philosophers[i] = new Philosopher(this, i);
 		}
 	}
 
@@ -30,6 +30,10 @@ class PhilosopherTable {
 		forks[forkNumber].acquire();
 	}
 
+	public boolean tryAcquireFork(int forkNumber) {
+		return forks[forkNumber].tryAcquire();
+	}
+	
 	public void releaseFork(int forkNumber) {
 		forks[forkNumber].release();
 	}

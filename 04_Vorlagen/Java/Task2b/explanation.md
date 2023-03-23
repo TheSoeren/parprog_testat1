@@ -1,0 +1,2 @@
+# Task 2b
+The problem with this "correction" is that there is a possibility of a deadlock. Specifically, if all the philosophers are hungry and attempt to acquire their left fork simultaneously, they will acquire it successfully, but none of them will be able to acquire their right fork since it is already acquired by their right neighbor. As a result, all the philosophers will be stuck in a deadlock, waiting for the right fork to become available.
