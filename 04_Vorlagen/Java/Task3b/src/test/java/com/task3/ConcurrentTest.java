@@ -1,4 +1,4 @@
-package aufgabe3b;
+package com.task3;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
