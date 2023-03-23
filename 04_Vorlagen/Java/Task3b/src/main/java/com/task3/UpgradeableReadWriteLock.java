@@ -8,18 +8,19 @@ public class UpgradeableReadWriteLock {
     private int readCount = 0;
     private int writeCount = 0;
     private int upgradeableReadCount = 0;
-    private Lock lock = new ReentrantLock();
-    private Condition readCondition = lock.newCondition();
-    private Condition writeCondition = lock.newCondition();
-    private Condition upgradeableReadCondition = lock.newCondition();
+	private int upgradedLock = 0;
+    private Lock lock = new ReentrantLock(true);
+    private Condition noReaders = lock.newCondition();
+    private Condition noWriters = lock.newCondition();
+    private Condition noUpgradableReaders = lock.newCondition();
 
     public void readLock() throws InterruptedException {
         lock.lock();
         try {
-            while (writeCount > 0) {
-                readCondition.await();
-            }
-            readCount++;
+			while (writeCount > 0) {
+				noReaders.await();
+			}
+			readCount++;
         } finally {
             lock.unlock();
         }
@@ -30,7 +31,7 @@ public class UpgradeableReadWriteLock {
         try {
             readCount--;
             if (readCount == 0) {
-                writeCondition.signal();
+                noWriters.signal();
             }
         } finally {
             lock.unlock();
@@ -41,12 +42,9 @@ public class UpgradeableReadWriteLock {
         lock.lock();
         try {
             while (writeCount > 0 || upgradeableReadCount > 0) {
-                upgradeableReadCondition.await();
+                noUpgradableReaders.await();
             }
             upgradeableReadCount++;
-            while (readCount > 0) {
-                readCondition.await();
-            }
         } finally {
             lock.unlock();
         }
@@ -57,7 +55,8 @@ public class UpgradeableReadWriteLock {
         try {
             upgradeableReadCount--;
             if (upgradeableReadCount == 0) {
-                readCondition.signalAll();
+                noUpgradableReaders.signalAll();
+				noWriters.signalAll();
             }
         } finally {
             lock.unlock();
@@ -67,9 +66,14 @@ public class UpgradeableReadWriteLock {
     public void writeLock() throws InterruptedException {
         lock.lock();
         try {
-            while (writeCount > 0 || readCount > 0 || upgradeableReadCount > 0) {
-                writeCondition.await();
+            while (writeCount > 0 || readCount > 0 || upgradedLock > 0) {
+                noWriters.await();
             }
+
+			if (upgradeableReadCount > 0) {
+				upgradedLock++;
+			}
+
             writeCount++;
         } finally {
             lock.unlock();
@@ -80,9 +84,14 @@ public class UpgradeableReadWriteLock {
         lock.lock();
         try {
             writeCount--;
-            upgradeableReadCondition.signalAll();
-            writeCondition.signal();
-            readCondition.signalAll();
+
+			if (upgradedLock > 0) {
+				upgradedLock++;
+			}
+
+            noUpgradableReaders.signalAll();
+            noWriters.signal();
+            noReaders.signalAll();
         } finally {
             lock.unlock();
         }
