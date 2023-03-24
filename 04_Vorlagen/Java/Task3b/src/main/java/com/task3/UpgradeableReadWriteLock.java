@@ -5,22 +5,23 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class UpgradeableReadWriteLock {
-    private int readCount = 0;
-    private int writeCount = 0;
-    private int upgradeableReadCount = 0;
-	private int upgradedLock = 0;
-    private Lock lock = new ReentrantLock(true);
-    private Condition noReaders = lock.newCondition();
-    private Condition noWriters = lock.newCondition();
-    private Condition noUpgradableReaders = lock.newCondition();
+    private final Lock lock = new ReentrantLock();
+    private final Condition writeCondition = lock.newCondition();
+    private final Condition upgradeCondition = lock.newCondition();
+    private final Condition readCondition = lock.newCondition();
+    private int readers = 0;
+    private boolean writer = false;
+    private Thread upgradableThread = null;
+    private boolean isUpgraded = false;
 
     public void readLock() throws InterruptedException {
         lock.lock();
         try {
-			while (writeCount > 0) {
-				noReaders.await();
-			}
-			readCount++;
+            while (writer) {
+                readCondition.await();
+            }
+
+            readers++;
         } finally {
             lock.unlock();
         }
@@ -29,34 +30,10 @@ public class UpgradeableReadWriteLock {
     public void readUnlock() {
         lock.lock();
         try {
-            readCount--;
-            if (readCount == 0) {
-                noWriters.signal();
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
+            readers--;
 
-    public void upgradeableReadLock() throws InterruptedException {
-        lock.lock();
-        try {
-            while (writeCount > 0 || upgradeableReadCount > 0) {
-                noUpgradableReaders.await();
-            }
-            upgradeableReadCount++;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public void upgradeableReadUnlock() {
-        lock.lock();
-        try {
-            upgradeableReadCount--;
-            if (upgradeableReadCount == 0) {
-                noUpgradableReaders.signalAll();
-				noWriters.signalAll();
+            if (readers == 0) {
+                writeCondition.signal();
             }
         } finally {
             lock.unlock();
@@ -66,15 +43,15 @@ public class UpgradeableReadWriteLock {
     public void writeLock() throws InterruptedException {
         lock.lock();
         try {
-            while (writeCount > 0 || readCount > 0 || upgradedLock > 0) {
-                noWriters.await();
+            while (writer || readers > 0 || !upgradeableLockAvailable() || (hasUpgradeLock() && isUpgraded) ) {
+                writeCondition.await();
             }
 
-			if (upgradeableReadCount > 0) {
-				upgradedLock++;
-			}
+            if (hasUpgradeLock()) {
+                isUpgraded = true;
+            }
 
-            writeCount++;
+            writer = true;
         } finally {
             lock.unlock();
         }
@@ -83,17 +60,53 @@ public class UpgradeableReadWriteLock {
     public void writeUnlock() {
         lock.lock();
         try {
-            writeCount--;
+            writer = false;
 
-			if (upgradedLock > 0) {
-				upgradedLock++;
-			}
+            if (isUpgraded) {
+                isUpgraded = false;
+            }
 
-            noUpgradableReaders.signalAll();
-            noWriters.signal();
-            noReaders.signalAll();
+            readCondition.signalAll();
+            upgradeCondition.signal();
+            writeCondition.signal();
         } finally {
             lock.unlock();
         }
+    }
+
+    public void upgradeableReadLock() throws InterruptedException {
+        lock.lock();
+        try {
+            while (writer || !upgradeableLockAvailable()) {
+                upgradeCondition.await();
+            }
+
+            upgradableThread = Thread.currentThread();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void upgradeableReadUnlock() {
+        lock.lock();
+        try {
+            upgradableThread = null;
+
+            readCondition.signalAll();
+            upgradeCondition.signal();
+            writeCondition.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private boolean hasUpgradeLock() {
+        if (upgradableThread == null) return false;
+
+        return upgradableThread.equals(Thread.currentThread());
+    }
+
+    private boolean upgradeableLockAvailable() {
+        return hasUpgradeLock() || upgradableThread == null;
     }
 }
